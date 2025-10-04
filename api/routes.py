@@ -3,6 +3,7 @@ FastAPI 라우트 정의
 API 엔드포인트만 관리
 """
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List
 from agent.agent import PaperAnalysisAgent
@@ -22,13 +23,6 @@ class PaperSummary(BaseModel):
     title: str
     authors: str
     year: int
-
-
-class AnalysisResponse(BaseModel):
-    """분석 결과 응답 모델"""
-    paper_id: int
-    title: str
-    analysis: str
 
 
 @router.get("/")
@@ -61,47 +55,31 @@ async def get_papers():
     ]
 
 
-@router.post("/papers/{paper_id}/analyze", response_model=AnalysisResponse)
+@router.post("/papers/{paper_id}/analyze")
 async def analyze_paper(paper_id: int):
     """
-    DB에 저장된 논문을 에이전트가 분석
+    DB에 저장된 논문을 스트리밍으로 분석
 
     Args:
         paper_id: 분석할 논문 ID
 
     Returns:
-        AnalysisResponse: 에이전트의 분석 결과
+        StreamingResponse: 실시간 분석 결과
 
     Raises:
-        HTTPException: 논문을 찾을 수 없거나 분석 실패 시
+        HTTPException: 논문을 찾을 수 없는 경우
     """
-    try:
-        # 1. DB에서 논문 조회
-        paper = db.get_paper_by_id(paper_id)
+    # 1. DB에서 논문 조회
+    paper = db.get_paper_by_id(paper_id)
 
-        if not paper:
-            raise HTTPException(
-                status_code=404,
-                detail=f"논문 ID {paper_id}를 찾을 수 없습니다."
-            )
-
-        # 2. 에이전트 실행
-        analysis_result = agent.analyze(paper["content"])
-
-        # 3. 결과 반환
-        return AnalysisResponse(
-            paper_id=paper["id"],
-            title=paper["title"],
-            analysis=analysis_result
-        )
-
-    except HTTPException:
-        # HTTPException은 그대로 재발생
-        raise
-
-    except Exception as e:
-        # 그 외 예외는 500 에러로 변환
+    if not paper:
         raise HTTPException(
-            status_code=500,
-            detail=f"논문 분석 중 오류가 발생했습니다: {str(e)}"
+            status_code=404,
+            detail=f"논문 ID {paper_id}를 찾을 수 없습니다."
         )
+
+    # 2. 스트리밍 응답 반환
+    return StreamingResponse(
+        agent.analyze(paper["content"]),
+        media_type="text/plain; charset=utf-8"
+    )
