@@ -13,7 +13,6 @@ app = FastAPI(
     description="논문 PDF를 업로드하면 AI 에이전트가 자율적으로 분석하는 API",
     version="1.0.0"
 )
-
 # API 라우터 등록
 app.include_router(router)
 
